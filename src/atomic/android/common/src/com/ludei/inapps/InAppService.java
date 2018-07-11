@@ -87,12 +87,27 @@ public interface InAppService {
     boolean canPurchase();
 
     /**
+     * Returns true if the subscriptions are avaialable and false otherwise.
+     *
+     * @return A boolean that will be true if the subscriptions are available and false otherwise.
+     */
+    boolean canPurchaseSubscriptions();
+
+    /**
      * Purchases the product.
      *
      * @param productId The product id of the product to purchase.
      * @param callback The purchase callback.
      */
     void purchase(String productId, PurchaseCallback callback);
+
+    /**
+     * Purchases the subscription.
+     *
+     * @param productId The product id of the product to purchase.
+     * @param callback The purchase callback.
+     */
+    void purchaseSubscription(String productId, PurchaseCallback callback);
 
     /**
      * Purchases the product.

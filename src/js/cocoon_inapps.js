@@ -96,6 +96,7 @@
         extension.serviceName = "InAppService";
         extension.signal = new Cocoon.Signal();
         extension._canPurchase = true;
+        extension._canPurchaseSubscriptions = true;
         extension._products = [];
 
         var stock = {};
@@ -190,6 +191,7 @@
 
             Cocoon.exec(this.serviceName, "initialize", [params], function(data) {
                 extension._canPurchase = data.canPurchase;
+                extension._canPurchaseSubscriptions= data.canPurchaseSubscriptions;
                 extension._products = data.products;
                 syncStock(extension._products);
                 if (callback) {
@@ -221,6 +223,20 @@
         extension.canPurchase = function() {
             return this._canPurchase;
         };
+
+        /**
+         * This method allows you to check is the subscription purchase is available and enabled in this platform.
+         * Not all Android devices will have the InApp service available or enabled.
+         * so you should check if it is before calling any other method.
+         * @memberof Cocoon.InApp
+         * @function canPurchaseSubscriptions
+         * @returns {boolean} True if the service is available and false otherwise.
+         * Cocoon.InApp.canPurchaseSubscriptions();
+         */
+        extension.canPurchaseSubscriptions = function() {
+            return this._canPurchaseSubscriptions;
+        };
+
 
         /**
          * Fetches the products information from the store.
@@ -361,6 +377,34 @@
             }
             callback = callback || function() {};
             Cocoon.exec(this.serviceName, "purchase", [productId, quantity], function() {
+                callback();
+            }, function(error) {
+                callback(error);
+            });
+        };
+
+        /**
+         * Requests a subscription purchase given its product id. Note that on iOS there is
+         * no distinction between products and subscriptions, but on Google Play Android there is.
+         * Hence it's always safer to split the calls between products and subscriptions
+         * @memberof Cocoon.InApp
+         * @function purchase
+         * @param {string} productId The id or alias of the product to be purchased.
+         * @param {function} callback The callback function. It receives the following parameters:
+         * - Error.
+         * @example 
+         * Cocoon.InApp.purchaseSubscription(product.productId, function(error) {
+         *      if(error){
+         *           console.log("Error: " + error);
+         *      }
+         *      else {
+         *           console.log("Successfully purchased);    
+         *      }
+         * });
+         */
+        extension.purchaseSubscription = function(productId, callback) {
+            callback = callback || function() {};
+            Cocoon.exec(this.serviceName, "purchaseSubscription", [productId, 1], function() {
                 callback();
             }, function(error) {
                 callback(error);

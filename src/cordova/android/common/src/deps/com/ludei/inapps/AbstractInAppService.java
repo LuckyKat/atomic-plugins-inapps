@@ -118,6 +118,12 @@ public abstract class AbstractInAppService implements InAppService {
     }
 
     @Override
+    public boolean canPurchaseSubscriptions() {
+        return true;
+    }
+
+
+    @Override
     public void purchase(String productId, PurchaseCallback callback) {
         this.purchase(productId, 1, callback);
     }

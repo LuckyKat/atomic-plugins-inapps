@@ -5,7 +5,6 @@ var fs = require('fs');
 var shell = require('gulp-shell');
 var del = require('del');
 var cordova = require('cordova-lib').cordova.raw;
-var jsdoc = require('gulp-jsdoc');
 var uglify = require('gulp-uglify');
 
 gulp.task('clean', function(finish){ 
@@ -121,6 +120,7 @@ gulp.task("build-cpp", ["build-cpp-ios", "build-cpp-android"]);
 gulp.task("build", ["build-ios", "build-android", "build-cordova", "build-cpp"]);
 
 gulp.task('doc-js', ["build-js"], function() {
+    var jsdoc = require('gulp-jsdoc');
 
     var config = require('./doc_template/js/jsdoc.conf.json');
 

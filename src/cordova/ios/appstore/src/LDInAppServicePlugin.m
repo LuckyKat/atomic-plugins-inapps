@@ -24,7 +24,9 @@
 -(void) initialize:(CDVInvokedUrlCommand*)command
 {
     NSDictionary * data = @{@"products": [self productsToJSON:_service.products],
-                            @"canPurchase": [NSNumber numberWithBool:[_service canPurchase]] };
+        @"canPurchase": [NSNumber numberWithBool:[_service canPurchase]],
+        @"canPurchaseSubscriptions": [NSNumber numberWithBool:true] 
+    };
     CDVPluginResult * result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:data];
     [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
     [_service start];
@@ -104,6 +106,12 @@
     [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:[_service canPurchase]] callbackId:command.callbackId];
 }
 
+// simply calls back with true, there's no difference in purchasing normal products and subscriptions
+-(void) canPurchaseSubscriptions:(CDVInvokedUrlCommand *) command
+{
+    [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:true] callbackId:command.callbackId];
+}
+
 -(void) purchase:(CDVInvokedUrlCommand *) command
 {
     NSString * productId = [command argumentAtIndex:0 withDefault:@"" andClass:[NSString class]];
@@ -119,6 +127,24 @@
         [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
     }];
 }
+
+// Note: purchaseSubscription is a copy of purchase
+-(void) purchaseSubscription:(CDVInvokedUrlCommand *) command
+{
+    NSString * productId = [command argumentAtIndex:0 withDefault:@"" andClass:[NSString class]];
+    NSNumber * quantity = [command argumentAtIndex:1 withDefault:[NSNumber numberWithInt:1] andClass:[NSNumber class]];
+    [_service purchase:productId quantity:quantity.integerValue completion:^(NSError *error) {
+        CDVPluginResult * result;
+        if (error) {
+            result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:[self errorToDic:error]];
+        }
+        else {
+            result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+        }
+        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+    }];
+}
+
 
 -(void) consume:(CDVInvokedUrlCommand *) command
 {

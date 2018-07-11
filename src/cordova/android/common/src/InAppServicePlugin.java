@@ -160,6 +160,10 @@ public class InAppServicePlugin extends CordovaPlugin implements InAppService.In
 	public void canPurchase(CordovaArgs args, CallbackContext ctx) {
 		ctx.sendPluginResult(new PluginResult(Status.OK, service.canPurchase()));
 	}
+
+	public void canPurchaseSubscriptions(CordovaArgs args, CallbackContext ctx) {
+		ctx.sendPluginResult(new PluginResult(Status.OK, service.canPurchaseSubscriptions()));
+	}
 	
 	public void finishPurchase(CordovaArgs args, CallbackContext ctx) {
 		//this methods exists for multiplatform JavaScript Compatibility
@@ -205,7 +209,28 @@ public class InAppServicePlugin extends CordovaPlugin implements InAppService.In
 			}
 		});			
 	}
-	
+
+	public void purchaseSubscription(CordovaArgs args, final CallbackContext ctx) {
+
+        cordova.setActivityResultCallback(this);
+
+		String productId = args.optString(0);
+		if (productId == null) {
+			ctx.sendPluginResult(new PluginResult(Status.ERROR, "Invalid argument"));
+			return;
+		}
+		service.purchaseSubscription(productId, new InAppService.PurchaseCallback() {
+			@Override
+			public void onComplete(InAppPurchase purchase, Error error) {
+				if (error != null) {
+					ctx.sendPluginResult(new PluginResult(Status.ERROR, errorToJSON(error)));
+				}
+				else {
+					ctx.sendPluginResult(new PluginResult(Status.OK, purchase.toJSON()));
+				}
+			}
+		});			
+	}
 	public void consume(CordovaArgs args, final CallbackContext ctx) {
 		String productId = args.optString(0);
 		if (productId == null) {

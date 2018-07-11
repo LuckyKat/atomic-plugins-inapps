@@ -8,6 +8,7 @@ import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.util.Log;
 
 import com.ludei.inapps.*;
 import com.android.vending.billing.*;
@@ -38,7 +39,7 @@ public class GooglePlayInAppService extends AbstractInAppService
             purchase.signature = signature;
             purchase.purchaseData = purchaseData;
             purchase.productId = jo.getString("productId");
-            purchase.transactionId = jo.optString("orderId", "test");
+            purchase.transactionId = jo.getString("orderId");
             purchase.quantity = 1;
             purchase.purchaseState = jo.getInt("purchaseState");
             purchase.purchaseToken = jo.getString("purchaseToken");
@@ -163,6 +164,22 @@ public class GooglePlayInAppService extends AbstractInAppService
                         } else {
                             error = new Error(response, Utils.getResponseDesc(response));
                         }
+
+                        // repeat for subscription
+                        if (canPurchaseSubscriptions()) {
+                            skuDetails = mService.getSkuDetails(5, mContext.getPackageName(), "subs", querySkus);
+                            response = skuDetails.getInt("RESPONSE_CODE");
+                            if (response == 0) {
+                                ArrayList<String> responseList = skuDetails.getStringArrayList("DETAILS_LIST");
+
+                                for (String productResponse : responseList) {
+                                    products.add(JSONObjectToInapp(new JSONObject(productResponse)));
+                                }
+                                error = null;
+                            } else {
+                                error = new Error(response, Utils.getResponseDesc(response));
+                            }
+                        }
                     } catch (Exception ex) {
                         error = new Error(0, ex.toString());
                     }
@@ -185,6 +202,17 @@ public class GooglePlayInAppService extends AbstractInAppService
 
         try {
             return mService!= null && mService.isBillingSupported(3, mContext.getPackageName(), "inapp") == 0;
+        } catch (RemoteException e) {
+            return false;
+        }
+    }
+
+
+    @Override
+    public boolean canPurchaseSubscriptions() {
+
+        try {
+            return mService!= null && mService.isBillingSupported(5, mContext.getPackageName(), "subs") == 0;
         } catch (RemoteException e) {
             return false;
         }
@@ -236,6 +264,64 @@ public class GooglePlayInAppService extends AbstractInAppService
         try {
             mPendingIntentProductId = productId;
             Bundle buyIntentBundle = mService.getBuyIntent(3, mContext.getPackageName(), productId, "inapp", developerPayload);
+            final int code = buyIntentBundle.getInt("RESPONSE_CODE", 0);
+
+            if (code == Utils.ResponseCode.BILLING_RESPONSE_RESULT_ITEM_ALREADY_OWNED) {
+                handleAlreadyOwnedError(productId);
+                return;
+            }
+            else if (code != Utils.ResponseCode.BILLING_RESPONSE_RESULT_OK) {
+                dispatchCallback(new Runnable() {
+                    @Override
+                    public void run() {
+                        notifyPurchaseFailed(productId, new Error(code, Utils.getResponseDesc(code)));
+                    }
+                });
+                return;
+            }
+            PendingIntent pendingIntent = buyIntentBundle.getParcelable("BUY_INTENT");
+            ((Activity)mContext).startIntentSenderForResult(pendingIntent.getIntentSender(), BUY_INTENT_REQUEST_CODE, new Intent(), 0, 0, 0);
+
+        }
+        catch (final Exception e) {
+            dispatchCallback(new Runnable() {
+                @Override
+                public void run() {
+                    notifyPurchaseFailed(productId, new Error(0, e.toString()));
+                }
+            });
+        }
+
+    }
+
+    @Override
+    public void purchaseSubscription(final String productId, final PurchaseCallback callback) {
+
+        if (mService == null) {
+            if (callback != null) {
+                callback.onComplete(null, new Error(0, "Service disconnected"));
+            }
+            return;
+        }
+        if (!canPurchaseSubscriptions()) {
+            if (callback != null) {
+                callback.onComplete(null, new Error(0, "Subscriptions not available"));
+            }
+            return;
+        }
+
+        if (callback != null) {
+            mPurchaseCallbacks.put(productId, callback);
+        }
+        dispatchCallback(new Runnable() {
+            @Override
+            public void run() {
+                notifyPurchaseStarted(productId);
+            }
+        });
+        try {
+            mPendingIntentProductId = productId;
+            Bundle buyIntentBundle = mService.getBuyIntent(5, mContext.getPackageName(), productId, "subs", developerPayload);
             final int code = buyIntentBundle.getInt("RESPONSE_CODE", 0);
 
             if (code == Utils.ResponseCode.BILLING_RESPONSE_RESULT_ITEM_ALREADY_OWNED) {
@@ -420,10 +506,6 @@ public class GooglePlayInAppService extends AbstractInAppService
                         Bundle ownedItems = mService.getPurchases(3, mContext.getPackageName(), "inapp", continuationToken);
                         final int response = ownedItems.getInt("RESPONSE_CODE");
 
-                        if (response != 0) {
-                            callback.onCompleted(purchases, new Error(response, Utils.getResponseDesc(response)));
-                            return;
-                        }
                         ArrayList<String> ownedSkus = ownedItems.getStringArrayList("INAPP_PURCHASE_ITEM_LIST");
                         ArrayList<String> purchaseDataList = ownedItems.getStringArrayList("INAPP_PURCHASE_DATA_LIST");
                         ArrayList<String> signatureList = ownedItems.getStringArrayList("INAPP_DATA_SIGNATURE_LIST");
@@ -444,10 +526,37 @@ public class GooglePlayInAppService extends AbstractInAppService
 
                         }
                         if (continuationToken == null || continuationToken.length() == 0) {
-                            callback.onCompleted(purchases, null);
                             break;
                         }
                     }
+                    while (canPurchaseSubscriptions()) {
+                        Bundle ownedItems = mService.getPurchases(5, mContext.getPackageName(), "subs", continuationToken);
+                        final int response = ownedItems.getInt("RESPONSE_CODE");
+
+                        ArrayList<String> ownedSkus = ownedItems.getStringArrayList("INAPP_PURCHASE_ITEM_LIST");
+                        ArrayList<String> purchaseDataList = ownedItems.getStringArrayList("INAPP_PURCHASE_DATA_LIST");
+                        ArrayList<String> signatureList = ownedItems.getStringArrayList("INAPP_DATA_SIGNATURE_LIST");
+                        continuationToken = ownedItems.getString("INAPP_CONTINUATION_TOKEN");
+
+                        for (int i = 0; i < purchaseDataList.size(); ++i) {
+                            String sku = ownedSkus.get(i);
+                            if (filterProductId != null && !filterProductId.equals(sku)) {
+                                continue;
+                            }
+                            String purchaseData = purchaseDataList.get(i);
+                            String signature = signatureList.get(i);
+                            GPInAppPurchase purchase = GPInAppPurchase.from(purchaseData, signature);
+                            purchase.developerPayload = developerPayload;
+                            if (filterState <0 || filterState == purchase.purchaseState) {
+                                purchases.add(purchase);
+                            }
+
+                        }
+                        if (continuationToken == null || continuationToken.length() == 0) {
+                            break;
+                        }
+                    }
+                    callback.onCompleted(purchases, null);
 
                 }
                 catch (final Exception e) {
@@ -479,6 +588,14 @@ public class GooglePlayInAppService extends AbstractInAppService
                             }
                         }
                     });
+                    return;
+                }
+
+                if (purchases.size() == 0) {
+                    // there was nothing to restore
+                    if (callback != null) {
+                        callback.onComplete(null);
+                    } 
                     return;
                 }
 
