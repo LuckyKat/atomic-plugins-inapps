@@ -51,12 +51,32 @@ public class AmazonInAppService extends AbstractInAppService implements Purchasi
     }
 
     @Override
+    public boolean canPurchaseSubscriptions() {
+        return true;
+    }
+
+    @Override
     public void restorePurchases(RestoreCallback callback) {
 
     }
 
     @Override
     public void purchase(final String productId, int quantity, PurchaseCallback callback) {
+
+        dispatchCallback(new Runnable() {
+            @Override
+            public void run() {
+                notifyPurchaseStarted(productId);
+            }
+        });
+
+        RequestId request = PurchasingService.purchase(productId);
+        mProductIds.put(request, productId);
+        mPurchaseCallbacks.put(request, callback);
+    }
+
+    @Override
+    public void purchaseSubscription(final String productId, PurchaseCallback callback) {
 
         dispatchCallback(new Runnable() {
             @Override
